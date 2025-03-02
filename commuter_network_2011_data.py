@@ -12,7 +12,7 @@ msoa_lookup = pd.read_csv(
 msoa_lookup.rename(columns={'MSOA21CD': 'MSOA_code', 'LAT': 'Latitude', 'LONG': 'Longitude'}, inplace=True)
 
 # Load commuting data
-commuting_data = pd.read_csv(r"C:\Users\kitcr\Downloads\MDM3 Trams\Bristol_2011_MSOA_data_formatted.csv")
+commuting_data = pd.read_csv(r"C:\Users\kitcr\Downloads\MDM3 Trams\Bristol_2011_MSOA_data_complete_formatted.csv")
 
 # Merge home and work locations
 commuting_data = commuting_data.merge(msoa_lookup, left_on='home_MSOA', right_on='MSOA_code', how='left')
