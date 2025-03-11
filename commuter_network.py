@@ -5,7 +5,9 @@ import geopandas as gpd
 from shapely.geometry import LineString
 import contextily as ctx
 from geopy.distance import geodesic
-
+'''
+Plots network (arrivals and departures) for 2021 MSOA commute data
+'''
 # Load MSOA lookup CSV
 msoa_lookup = pd.read_csv(
     r"C:\Users\kitcr\Downloads\MDM3 Trams\Middle_layer_Super_Output_Areas_December_2021_Boundaries_EW_BGC_V3_-8386444323138516297.csv")
