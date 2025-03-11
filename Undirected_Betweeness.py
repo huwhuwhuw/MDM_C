@@ -3,10 +3,13 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from geopy.distance import geodesic
 import matplotlib
+import folium
 import numpy as np
 matplotlib.use('TkAgg')
 '''
-Creates undirected graph from MSOA commute data (Adds outgoing commute count and incoming), measures betweeness centrality for edges and nodes and deletes nodes with lowest betweeness centrality (lowest histogram bin in plot).
+Creates undirected graph from MSOA commute data (Adds outgoing commute count and incoming), 
+measures betweeness centrality for edges and nodes and deletes nodes with lowest betweeness centrality 
+(lowest histogram bin in plot), further deletes non-central edges and saves a map of the result.
 '''
 # **Step 1: Load Data**
 msoa_lookup = pd.read_csv("MSOA_Dec_2011_Boundaries_Generalised_Clipped_BGC_EW_V3_2022_-5777602578195197657.csv")
@@ -41,23 +44,20 @@ bristol_nodes = msoa_lookup[
 ]
 
 # **Step 4: Create Undirected Graph**
-G = nx.Graph()  # Use an undirected graph
+G = nx.Graph()
 
 # Add nodes with positions
 for _, row in bristol_nodes.iterrows():
     G.add_node(row['MSOA_code'], pos=(row['Longitude'], row['Latitude']))
 
 tidy_commuting_data = commuting_data[commuting_data['home_MSOA'] != commuting_data['work_MSOA']]
+
 # Combine weights for undirected edges
 edge_weights = {}
 for _, row in tidy_commuting_data.iterrows():
     if row['home_MSOA'] in G.nodes and row['work_MSOA'] in G.nodes:
-        # Create a sorted tuple to represent the undirected edge
         edge = tuple(sorted((row['home_MSOA'], row['work_MSOA'])))
-        if edge in edge_weights:
-            edge_weights[edge] += row['commuter_count']
-        else:
-            edge_weights[edge] = row['commuter_count']
+        edge_weights[edge] = edge_weights.get(edge, 0) + row['commuter_count']
 
 # Add edges to the graph with combined weights
 for edge, weight in edge_weights.items():
@@ -65,113 +65,107 @@ for edge, weight in edge_weights.items():
 
 # **Step 5: Plot the Original Graph**
 plt.figure(figsize=(12, 12))
-
-# Get node positions
 pos = nx.get_node_attributes(G, 'pos')
 
-# Draw nodes
 nx.draw_networkx_nodes(G, pos, node_size=50, node_color='blue', alpha=0.8)
+nx.draw_networkx_edges(G, pos, edge_color='gray', width=0.5, alpha=0.6)
 
-# Draw edges with weights
-edges = G.edges(data=True)
-edge_widths = [data['weight'] / 100 for _, _, data in edges]  # Scale edge widths for visualization
-nx.draw_networkx_edges(G, pos, edge_color='gray', width=edge_widths, alpha=0.6)
-
-# Draw labels (optional, can be commented out if too cluttered)
-# nx.draw_networkx_labels(G, pos, font_size=8, font_color='black')
-
-# Set title and axis labels
 plt.title('Original Graph: Undirected Commuter Flows in Bristol Area')
 plt.xlabel('Longitude')
 plt.ylabel('Latitude')
 
-# Show plot
-coordinates = nx.get_node_attributes(G, 'pos')
-# **Step 6: Find Nodes with Largest and Smallest Latitudes and Longitudes**
-# Find keys for min/max longitude (first element in tuple)
-min_longitude_key = min(coordinates, key=lambda k: coordinates[k][1])
-max_longitude_key = max(coordinates, key=lambda k: coordinates[k][1])
+# **Step 6: Compute and Plot Node Betweenness Centrality**
+node_betweenness = nx.betweenness_centrality(G, weight='weight')
 
-# Find keys for min/max latitude (second element in tuple)
-min_latitude_key = min(coordinates, key=lambda k: coordinates[k][0])
-max_latitude_key = max(coordinates, key=lambda k: coordinates[k][0])
+plt.figure(figsize=(8, 6))
+plt.hist(node_betweenness.values(), bins=20, color='blue', alpha=0.7)
+plt.title('Node Betweenness Centrality Distribution')
+plt.xlabel('Betweenness Centrality')
+plt.ylabel('Frequency')
 
-# Print coordinates of the extreme points
-print("Min Latitude:", coordinates[min_latitude_key])
-print("Max Latitude:", coordinates[max_latitude_key])
-print("Min Longitude:", coordinates[min_longitude_key])
-print("Max Longitude:", coordinates[max_longitude_key])
-
-# **Step 7: Calculate Betweenness Centrality**
-def calculate_node_betweenness(graph):
-    """Calculate node betweenness centrality."""
-    return nx.betweenness_centrality(graph, weight='weight')
-
-def calculate_edge_betweenness(graph):
-    """Calculate edge betweenness centrality."""
-    return nx.edge_betweenness_centrality(graph, weight='weight')
-
-# Compute node and edge betweenness centrality
-node_betweenness = calculate_node_betweenness(G)
-edge_betweenness = calculate_edge_betweenness(G)
-
-# **Step 8: Plot Distributions of Betweenness Centrality**
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
-
-# Plot node betweenness centrality distribution
-node_bc_values = list(node_betweenness.values())
-ax1.hist(node_bc_values, bins=20, color='blue', alpha=0.7)
-ax1.set_title('Node Betweenness Centrality Distribution')
-ax1.set_xlabel('Betweenness Centrality')
-ax1.set_ylabel('Frequency')
-
-# Plot edge betweenness centrality distribution
-edge_bc_values = list(edge_betweenness.values())
-ax2.hist(edge_bc_values, bins=20, color='green', alpha=0.7)
-ax2.set_title('Edge Betweenness Centrality Distribution')
-ax2.set_xlabel('Betweenness Centrality')
-ax2.set_ylabel('Frequency')
-
-# Show plots
-plt.tight_layout()
-
-
-# **Step 9: Identify Nodes in the Lowest Histogram Bin**
-# Get the histogram bins and counts
-counts, bin_edges = np.histogram(node_bc_values, bins=20)
-
-# Identify the nodes in the lowest bin
+# **Step 7: Identify and Remove Nodes in the Lowest Bin**
+counts, bin_edges = np.histogram(list(node_betweenness.values()), bins=20)
 lowest_bin_nodes = [node for node, bc in node_betweenness.items() if bc < bin_edges[1]]
 
-# **Step 10: Remove Nodes in the Lowest Bin and Their Edges**
 G_reduced = G.copy()
 G_reduced.remove_nodes_from(lowest_bin_nodes)
 
-# **Step 11: Plot the Reduced Graph**
+# **Step 8: Plot the Reduced Graph with MSOA Codes**
 plt.figure(figsize=(12, 12))
-
-# Get node positions for the reduced graph
 pos_reduced = nx.get_node_attributes(G_reduced, 'pos')
 
-# Draw nodes
-nx.draw_networkx_nodes(G_reduced, pos_reduced, node_size=50, node_color='blue', alpha=0.8)
+nx.draw_networkx_nodes(G_reduced, pos_reduced, node_size=50, node_color='red', alpha=0.8)
+nx.draw_networkx_edges(G_reduced, pos_reduced, edge_color='gray', width=0.5, alpha=0.6)
+nx.draw_networkx_labels(G_reduced, pos_reduced, font_size=8, font_color='black')
 
-# Draw edges with weights
-edges_reduced = G_reduced.edges(data=True)
-edge_widths_reduced = [data['weight'] / 100 for _, _, data in edges_reduced]  # Scale edge widths for visualization
-nx.draw_networkx_edges(G_reduced, pos_reduced, edge_color='gray', width=edge_widths_reduced, alpha=0.6)
-nx.draw_networkx_labels(G_reduced, pos, font_size=8, font_color='black')
-
-# Draw labels (optional, can be commented out if too cluttered)
-# nx.draw_networkx_labels(G_reduced, pos_reduced, font_size=8, font_color='black')
-
-# Set title and axis labels
 plt.title('Reduced Graph: Nodes in Lowest Betweenness Bin Removed')
 plt.xlabel('Longitude')
 plt.ylabel('Latitude')
 
-# Show plot
+# **Step 9: Compute and Plot Edge Betweenness Centrality in Reduced Graph**
+edge_betweenness_reduced = nx.edge_betweenness_centrality(G_reduced, weight='weight')
+
+plt.figure(figsize=(8, 6))
+plt.hist(edge_betweenness_reduced.values(), bins=20, color='green', alpha=0.7)
+plt.title('Edge Betweenness Centrality Distribution (Reduced Graph)')
+plt.xlabel('Betweenness Centrality')
+plt.ylabel('Frequency')
+
+# **Step 10: Identify and Remove Edges in the Lowest Bin**
+counts, bin_edges = np.histogram(list(edge_betweenness_reduced.values()), bins=20)
+lowest_bin_edges = [edge for edge, bc in edge_betweenness_reduced.items() if bc < bin_edges[7]]
+
+G_further_reduced = G_reduced.copy()
+G_further_reduced.remove_edges_from(lowest_bin_edges)
+
+# **Step 11: Plot the Further Reduced Graph**
+plt.figure(figsize=(12, 12))
+pos_further_reduced = nx.get_node_attributes(G_further_reduced, 'pos')
+
+nx.draw_networkx_nodes(G_further_reduced, pos_further_reduced, node_size=50, node_color='purple', alpha=0.8)
+nx.draw_networkx_edges(G_further_reduced, pos_further_reduced, edge_color='gray', width=0.5, alpha=0.6)
+nx.draw_networkx_labels(G_further_reduced, pos_further_reduced, font_size=8, font_color='black')
+
+plt.title('Further Reduced Graph: Low Betweenness Edges Removed')
+plt.xlabel('Longitude')
+plt.ylabel('Latitude')
+
+# **Find Extreme Nodes (North, South, East, West)**
+northernmost = max(G_reduced.nodes, key=lambda n: G_reduced.nodes[n]['pos'][1])
+southernmost = min(G_reduced.nodes, key=lambda n: G_reduced.nodes[n]['pos'][1])
+easternmost = max(G_reduced.nodes, key=lambda n: G_reduced.nodes[n]['pos'][0])
+westernmost = min(G_reduced.nodes, key=lambda n: G_reduced.nodes[n]['pos'][0])
+
+# **Print Extreme Node Coordinates**
+print("Extreme Nodes and Their Coordinates:")
+print(f"📍 Northernmost Node: {northernmost}, Coordinates: {G_reduced.nodes[northernmost]['pos']}")
+print(f"📍 Southernmost Node: {southernmost}, Coordinates: {G_reduced.nodes[southernmost]['pos']}")
+print(f"📍 Easternmost Node: {easternmost}, Coordinates: {G_reduced.nodes[easternmost]['pos']}")
+print(f"📍 Westernmost Node: {westernmost}, Coordinates: {G_reduced.nodes[westernmost]['pos']}")
+
+# **Plot on an Interactive Folium Map**
+bristol_map = folium.Map(location=bristol_center, zoom_start=12, tiles="OpenStreetMap")
+
+# **Plot Reduced Graph Edges**
+for edge in G_further_reduced.edges:
+    loc1 = G_reduced.nodes[edge[0]]['pos'][1], G_reduced.nodes[edge[0]]['pos'][0]  # (lat, lon)
+    loc2 = G_reduced.nodes[edge[1]]['pos'][1], G_reduced.nodes[edge[1]]['pos'][0]
+    folium.PolyLine([loc1, loc2], color="gray", weight=1.5, opacity=0.5).add_to(bristol_map)
+
+# **Add Reduced Graph Nodes**
+for node, data in G_reduced.nodes(data=True):
+    folium.CircleMarker(
+        location=(data['pos'][1], data['pos'][0]),
+        radius=3,
+        color='blue',
+        fill=True,
+        fill_color='blue',
+        fill_opacity=0.6,
+        popup=f"Node: {node}"
+    ).add_to(bristol_map)
+
+# **Save and Display Map**
+bristol_map.save("bristol_commuting_reduced_map.html")
+print("✅ Interactive map saved as 'bristol_commuting_reduced_map.html'. Open this file in a browser to view.")
+
 plt.show()
-
-
-
