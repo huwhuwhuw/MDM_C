@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Fri Mar  7 14:12:43 2025
+Takes 2011_OAs_Bath_North_Somers_Cleaned.csv, or 2011_OAs_Bris_GlousNorth_Cleaned.csv 
+To do both, run twice but second time input json file on line 86
 
-@author: huwtebbutt
+Outputs a json file with format
+Keys= OA codes
+Values= [Weights, (Lat,Long)]
 """
 #import pandas as pd
 import requests
@@ -73,16 +76,17 @@ def is_within_radius(lat, lon, center=(51.4545, -2.5879), max_distance_km=10):
 Center_Lat=51.4545
 Center_Long=-2.5879
 
-data2011='/Users/huwtebbutt/Documents/MDM3/3rd_term/2011_OA_BrisGlou.csv'
+data2011='filepath/2011_OA_Bris_GlousNorth_Cleaned.csv'
+#data2011='filepath/2011_OA_Bath_NorthSomers_Cleaned.csv'
 file = open(data2011, mode='r', newline='')
 CSV = csv.reader(file)
 #df=pd.read_csv(data2011)
 
 #Dictionary with: Key=OA Code , Values=[Weight, (Lat,Long)]. Can create new or add to existing
-#Filtered_Dict={}
-filepath = '/Users/huwtebbutt/Documents/MDM3/3rd_term/BathSomerset_Code_Weight_Coords.json'
+Filtered_Dict={}
+"""filepath = 'path/path/Name.json'
 with open(filepath, 'r') as file:
-    Filtered_Dict = json.load(file)
+    Filtered_Dict = json.load(file)""" 
 
 
 for i,row in enumerate(CSV):
@@ -131,9 +135,9 @@ for i,row in enumerate(CSV):
                     Filtered_Dict[Code]=[Weight,Coords]
 
 #Save dictionary as file
-filepath = '/Users/huwtebbutt/Documents/MDM3/3rd_term/BrisGlou_Code_Weight_Coords.json'
+filepath = 'path/path/Name.json'
 
-# Write the dictionary to a file in JSON format
+#Write the dictionary to a file in JSON format
 with open(filepath, 'w') as file:
     json.dump(Filtered_Dict, file)
 
