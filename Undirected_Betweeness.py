@@ -8,8 +8,8 @@ import numpy as np
 matplotlib.use('TkAgg')
 '''
 Creates undirected graph from MSOA commute data (Adds outgoing commute count and incoming), 
-measures betweeness centrality for edges and nodes and deletes nodes with lowest betweeness centrality 
-(lowest histogram bin in plot), further deletes non-central edges and saves a map of the result.
+measures pagerank centrality for nodes (chosen because it led to seemingly good node placement) and betweenness for edgesdeletes
+ nodes and edges with lowest centrality (based on histogramm) and saves a map of the result.
 '''
 # **Step 1: Load Data**
 msoa_lookup = pd.read_csv("MSOA_Dec_2011_Boundaries_Generalised_Clipped_BGC_EW_V3_2022_-5777602578195197657.csv")
@@ -75,7 +75,8 @@ plt.xlabel('Longitude')
 plt.ylabel('Latitude')
 
 # **Step 6: Compute and Plot Node Betweenness Centrality**
-node_betweenness = nx.betweenness_centrality(G, weight='weight')
+# node_betweenness = nx.betweenness_centrality(G, weight='weight')
+node_betweenness = nx.pagerank(G, weight='weight')
 
 plt.figure(figsize=(8, 6))
 plt.hist(node_betweenness.values(), bins=20, color='blue', alpha=0.7)
@@ -85,7 +86,7 @@ plt.ylabel('Frequency')
 
 # **Step 7: Identify and Remove Nodes in the Lowest Bin**
 counts, bin_edges = np.histogram(list(node_betweenness.values()), bins=20)
-lowest_bin_nodes = [node for node, bc in node_betweenness.items() if bc < bin_edges[1]]
+lowest_bin_nodes = [node for node, bc in node_betweenness.items() if bc < bin_edges[2]]
 
 G_reduced = G.copy()
 G_reduced.remove_nodes_from(lowest_bin_nodes)
@@ -113,7 +114,7 @@ plt.ylabel('Frequency')
 
 # **Step 10: Identify and Remove Edges in the Lowest Bin**
 counts, bin_edges = np.histogram(list(edge_betweenness_reduced.values()), bins=20)
-lowest_bin_edges = [edge for edge, bc in edge_betweenness_reduced.items() if bc < bin_edges[7]]
+lowest_bin_edges = [edge for edge, bc in edge_betweenness_reduced.items() if bc < bin_edges[6]]
 
 G_further_reduced = G_reduced.copy()
 G_further_reduced.remove_edges_from(lowest_bin_edges)
