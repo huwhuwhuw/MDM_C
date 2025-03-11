@@ -5,7 +5,9 @@ from geopy.distance import geodesic
 import matplotlib
 import numpy as np
 matplotlib.use('TkAgg')
-
+'''
+Creates undirected graph from MSOA commute data (Adds outgoing commute count and incoming), measures betweeness centrality for edges and nodes and deletes nodes with lowest betweeness centrality (lowest histogram bin in plot).
+'''
 # **Step 1: Load Data**
 msoa_lookup = pd.read_csv("MSOA_Dec_2011_Boundaries_Generalised_Clipped_BGC_EW_V3_2022_-5777602578195197657.csv")
 msoa_lookup.rename(columns={'MSOA11CD': 'MSOA_code', 'LAT': 'Latitude', 'LONG': 'Longitude'}, inplace=True)
