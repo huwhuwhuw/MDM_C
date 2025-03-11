@@ -4,6 +4,9 @@ import os
 import networkx as nx
 import matplotlib.pyplot as plt
 import pickle
+'''
+Calculates CLoseness centralities for OAs (or MSOAs if csv changed).
+'''
 
 def CSV_To_ADJ(data_path):
     """Converts the 2011 (MS)OA raw data table into a weighted adjacency matrix"""
