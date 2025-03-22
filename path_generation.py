@@ -12,6 +12,8 @@ import numpy as np
 
 """
 Do not share or abuse the api key. Save all results
+Handles all generating routes with gmaps api, plotting graphs of clusters and routes between them and creating adjacency matrix
+Use Data_Management class to easily open, save and handle all files needed
 """
 
 
@@ -35,9 +37,6 @@ def Plan_Route(start, end, api_key="""insert api key here"""):
     """
     # initialise google maps library
     gmap = googlemaps.Client(key=api_key)
-
-    # initialise data management class
-    handler = Data_Management()
 
     # unpack start and end locations
     start_coords = [start[1], start[2]]
@@ -66,34 +65,42 @@ class Data_Management:
         self.csv_folder = os.path.join(os.path.dirname(__file__), csv_folder)
 
     def save(self, data, filename):
+        """ save any python object to the data folder """
         self.filepath = os.path.join(self.data_folder, filename)
         with open(self.filepath, 'wb') as file:
             pkl.dump(data, file)
 
     def load(self, filename):
-        """ opens any misc file """
+        """ opens any python object from the data folder """
         self.filepath = os.path.join(self.data_folder, filename)
         with open(self.filepath, 'rb') as file:
-            data = pkl.load(file)
-        return data
+            self.data = pkl.load(file)
+
+        return self.data
 
     def load_coords(self, filename='msoa_lookup.csv'):
-        return pd.read_csv(os.path.join(self.csv_folder, filename))
+        """ loads coordinates of OA areas. I don't know why the file is named msoa it is the OA codes """
+        self.coords = pd.read_csv(os.path.join(self.csv_folder, filename))
+
+        return self.coords
 
     def load_OA_clusters(self, filename='commuter_flows.csv'):
-        clusters = pd.read_csv(os.path.join(self.csv_folder, filename))
+        """ loads clusters from file """
+        self.clusters = pd.read_csv(os.path.join(self.csv_folder, filename))
         # cluster locations are in both home and work columns (weirdly) and contain duplicates
-        self.clusters = list(pd.concat([clusters['Home Cluster OA Code'], clusters['Work Cluster OA Code']]).unique())
+        self.clusters = list(pd.concat([self.clusters['Home Cluster OA Code'], self.clusters['Work Cluster OA Code']]).unique())
+
         return self.clusters
 
-    def load_cluster_coords(self):
-        self.coords = self.load_coords()
-        self.clusters = self.load_OA_clusters()
-
-        return self.coords[self.coords['OA_code'].isin(self.clusters)]
+    def load_cluster_coords(self, filename='msoa_lookup.csv'):
+        """ loads coordinates for clusters """
+        self.load_OA_clusters()
+        self.coords = pd.read_csv(os.path.join(self.csv_folder, filename))
+        self.coords = self.coords[self.coords['OA_code'].isin(self.clusters)]
+        return self.coords
 
     def load_route(self, start, end):
-        """ open and format gmaps route between start and end """
+        """ open and format gmaps route between start and end OA codes"""
         self.filepath = os.path.join(self.data_folder, f'{start}_{end}')
         with open(self.filepath, 'rb') as file:
             self.data = pkl.load(file)
@@ -113,6 +120,23 @@ class Data_Management:
                 self.route['steps']['long'].append(point[1])
 
         return self.route
+
+    def generate_graph(self, max_distance=4000):
+        """ generate adjacency matrix of routes between clusters
+            max_distance : int, maximum distance of routes between clusters in meters"""
+        self.adj = pd.DataFrame(index=self.clusters, columns=self.clusters)  # adjaceny matrix for graph
+        # iterate through every combination of
+        for clusterA in self.clusters:
+            for clusterB in self.clusters:
+                try:
+                    self.load_route(clusterA, clusterB)
+                    if self.route['distance'] < max_distance:
+                        self.adj.loc[clusterA, clusterB] = self.route['distance']
+                except FileNotFoundError:
+                    # some routes are only calculated one way, ignore attempts to load that route reversed
+                    pass
+
+        return self.adj
 
 
 class OA_Plot:
@@ -135,8 +159,6 @@ class OA_Plot:
         self.ax.grid()
         self.ax.set_xlabel('longitude')
         self.ax.set_ylabel('latitude')
-        # self.ax.set_yticks(np.linspace(6716000, 6702000, num=8))
-        # self.ax.set_yticklabels(np.linspace(6716000, 6702000, num=8))
 
     def create_route_plot(self, route):
 
@@ -146,6 +168,7 @@ class OA_Plot:
         self.ax.plot(route['steps']['long'], route['steps']['lat'])
 
     def add_basemap(self):
+        """ should be final call to ensure map generates properly """
         ctx.add_basemap(self.ax, crs=self.curves.crs, source=ctx.providers.CartoDB.Positron)
 
     def pretty_plot(self):
@@ -166,6 +189,9 @@ def Plot():
     adj = pd.DataFrame(index=handler.clusters, columns=handler.clusters)  # adjaceny matrix for graph analysis
 
     max_distance = 4000  # maximum distance to connect cluster by (meters)
+
+    print(handler.generate_graph())
+    return
 
     # mapping clusters together
     for clusterA in handler.clusters:
