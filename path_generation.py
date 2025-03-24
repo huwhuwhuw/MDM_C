@@ -75,8 +75,6 @@ def Plan_Route(start, end, api_key="""insert api key here"""):
 def generate_all_lines():
     """ Create a complete graph of links between the clusters and an artificial center node """
 
-    # my gmaps api key
-    key = """AIzaSyCpSmYW_cCcmKL_ZBhAAZ9RFFRrsgFvx90"""
 
     # coordinates of colston street in bristol center where bus interchange currently is
     # center = ('Center', 51.454919, -2.596510)
