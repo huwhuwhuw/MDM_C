@@ -14,7 +14,7 @@ def Line_Score(Line,Dict):
     Parameters
     ----------
     Line : List
-        A list of coordinates, that correspond to the location of stations.
+        A list of Codes, that correspond to the location of stations.
     Dict : Dictionary
         A dictionary with format {OA code: (Weight), (Coords)}
 
