@@ -104,7 +104,21 @@ if __name__=='__main__':
         import json
         Dict = json.load(file)
     
+    #Manual Lines from Kits code
+    Line_1=["E00074370","E00073742",
+            "E00073325","E00174285",
+            "E00174050","E00073425",
+            "E00174312","E00074104",
+            "E00073921","E00075310",
+            "E00075339","E00075523"]
     
-    Codes=list(Dict.keys())
-    Metric=Line_Score(Codes[500:550],Dict)
-    print(f'Overall {Metric}')
+    Line_2=["E00073342","E00073396","E00074002","E00174242","E00174242","E00174312"]
+
+    Line_3=["E00075658", "E00073698","E00074057","E00174312"]
+    
+    Line_4=["E00075658", "E00073698"]
+    
+    for i,Line in enumerate([Line_1,Line_2,Line_3,Line_4]):
+        print(f'Line {i+1}')
+        Metric=Line_Score(Line,Dict)
+        print(f'Overall {round(Metric,5)}\n')
