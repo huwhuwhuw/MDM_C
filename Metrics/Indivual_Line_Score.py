@@ -23,10 +23,10 @@ def Line_Score(Line,Dict):
     Metric : Float
         A single value that represents the efficiency of the line.
     """
-    def Pounds_For_Station(Amount_of_Stations,cost_per_station=700_000):
+    def Pounds_For_Station(Amount_of_Stations,cost_per_station=700_000):#Value from Cost Metric.py
         return Amount_of_Stations * cost_per_station
     
-    def Pounds_For_Meter(Line_Length,cost_per_meter=11_500):
+    def Pounds_For_Meter(Line_Length,cost_per_meter=11_500):#Value from Cost Metric.py
         return Line_Length * cost_per_meter
     
     def Road_Distance(start_coords, end_coords, api_key):
