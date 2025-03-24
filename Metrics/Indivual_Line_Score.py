@@ -70,7 +70,7 @@ def Line_Score(Line,Dict):
         count+=Weight
         Scores.append(Score(Distance_to_Station)*Weight)
     #Find mean score
-    Avg_Score=sum(Scores)/count
+    Avg_Score=sum(Scores)
     
     #Get API key from super secure location
     with open('API_KEY.txt','r') as file:    
@@ -94,4 +94,17 @@ def Line_Score(Line,Dict):
     Line_Cost  =  Pounds_For_Meter(Line_Length)
     
     Metric=Avg_Score/(Station_Cost + Line_Cost)
+    print(f"Population Score: {Avg_Score}\nStations: £{Station_Cost}\nLine: £{Line_Cost}")
     return Metric
+
+
+if __name__=='__main__':
+    filepath = '/Users/huwtebbutt/Documents/MDM3/3rd_term/Bris_Codes_with_Weights_and_Coords_NEW.json'
+    with open(filepath, 'r') as file:
+        import json
+        Dict = json.load(file)
+    
+    
+    Codes=list(Dict.keys())
+    Metric=Line_Score(Codes[500:550],Dict)
+    print(f'Overall {Metric}')
