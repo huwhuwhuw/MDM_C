@@ -63,11 +63,14 @@ features = node_gdf[['geometry', 'total_arrivals', 'total_departures']].copy()
 features['Longitude'] = features['geometry'].x
 features['Latitude'] = features['geometry'].y
 
+features['total_arrivals'] = features['total_arrivals'] ** 1.5
+features['total_departures'] = features['total_departures'] ** 1.5
+
 # Define clustering input
 X = features[['Longitude', 'Latitude', 'total_arrivals', 'total_departures']].values
 
 # Define number of clusters
-n_clusters = 50
+n_clusters = 60
 
 # Apply K-Medoids Clustering
 kmedoids = KMedoids(n_clusters=n_clusters, random_state=42, method='pam')
@@ -115,11 +118,11 @@ kmedoids_centroids_gdf = kmedoids_centroids_gdf.to_crs(epsg=3857)
 # Plot results
 fig, ax = plt.subplots(figsize=(12, 8))
 node_gdf.plot(ax=ax, markersize=2, color="lightgrey", alpha=0.6)
-features.plot(ax=ax, column='KMedoids_Cluster', cmap='tab10', markersize=2)
+#features.plot(ax=ax, column='KMedoids_Cluster', cmap='tab10', markersize=2)
 kmedoids_centroids_gdf[kmedoids_centroids_gdf['Stop_Type'] == 'Major'].plot(ax=ax, color="red", markersize=80, marker="X")
-kmedoids_centroids_gdf[kmedoids_centroids_gdf['Stop_Type'] == 'Minor'].plot(ax=ax, color="black", markersize=80, marker="X")
+kmedoids_centroids_gdf[kmedoids_centroids_gdf['Stop_Type'] == 'Minor'].plot(ax=ax, color="red", markersize=80, marker="X")
 ctx.add_basemap(ax, source=ctx.providers.CartoDB.Positron)
-ax.set_title("Optimal Tram Station Locations in Bristol (K-Medoids Clustering)")
+#ax.set_title("Potential Tram Stop Locations in Bristol (K-Medoids Clustering, k = 40)")
 ax.set_xticks([])
 ax.set_yticks([])
 ax.set_xlabel("")
@@ -129,5 +132,5 @@ plt.show()
 
 # Extract the OA codes of the plotted representative nodes
 plotted_oa_codes = kmedoids_centroids_gdf['OA_Code']
-plotted_oa_codes.to_csv("kmedoids_oa_codes_50.csv", index=False, header=["OA_Code"])
+plotted_oa_codes.to_csv("kmedoids_oa_codes_60.csv", index=False, header=["OA_Code"])
 #print("✅ CSV file saved as 'markov_oa_codes.csv' with", len(plotted_oa_codes), "OA codes.")
