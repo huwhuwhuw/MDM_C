@@ -39,3 +39,4 @@ cost_per_station = total_cost / num_stations if num_stations > 0 else 0
 print(f"Total building cost: £{total_cost:,.2f}")
 print(f"Total track length: {total_track_length:,.2f} meters")
 print(f"Cost per station: £{cost_per_station:,.2f}")
+
