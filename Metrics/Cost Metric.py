@@ -18,16 +18,16 @@ for _, row in flows_df.iterrows():
     oa1 = row['Home Cluster OA Code']
     oa2 = row['Work Cluster OA Code']
     if oa1 == oa2:
-        continue  
+        continue
     pair = tuple(sorted([oa1, oa2]))
     connections.add(pair)
 
-total_track_length = 0.0 
+total_track_length = 0.0
 for oa1, oa2 in connections:
     coord1 = station_locations.get(oa1)
     coord2 = station_locations.get(oa2)
     if coord1 and coord2:
-        distance_m = geodesic(coord1, coord2).meters 
+        distance_m = geodesic(coord1, coord2).meters
         total_track_length += distance_m
 
 station_cost_total = num_stations * 700_000
@@ -39,3 +39,4 @@ cost_per_station = total_cost / num_stations if num_stations > 0 else 0
 print(f"Total building cost: £{total_cost:,.2f}")
 print(f"Total track length: {total_track_length:,.2f} meters")
 print(f"Cost per station: £{cost_per_station:,.2f}")
+
