@@ -75,7 +75,6 @@ def Plan_Route(start, end, api_key="""insert api key here"""):
 def generate_all_lines():
     """ Create a complete graph of links between the clusters and an artificial center node """
 
-
     # coordinates of colston street in bristol center where bus interchange currently is
     # center = ('Center', 51.454919, -2.596510)
 
@@ -162,9 +161,11 @@ class Data_Management:
 
         return self.route
 
-    def dynamic_radius(self, k=5, alpha=4):
+    def dynamic_radius(self, k=5, alpha=3.5):
         """ implements a dynamic radius to generate graph from
             nodes with closer neighbours have a lower maximum connection radius """
+
+        # create copy of coordinates to convert to lat/long without impacting other functions
         coordinates = self.load_cluster_coords()
 
         # radius has to be stored with coords to allow oa code indexing
@@ -181,6 +182,7 @@ class Data_Management:
         self.tree = KDTree(coordinate_list)
 
         for cluster in self.clusters:
+            # get distance of k nearest nodes from every node
             self.distance, _ = self.tree.query([self.coords.loc[self.coords['OA_code'] == cluster, 'Longitude'].iloc[0],
                                                 self.coords.loc[self.coords['OA_code'] == cluster, 'Latitude'].iloc[0]],
                                                k=k)
@@ -190,13 +192,17 @@ class Data_Management:
 
         return coordinates
 
-    def generate_graph(self, max_distance=4000, clusterfile=None):
+    def generate_graph(self, clusterfile=None, k=5, alpha=4):
         """ generate adjacency matrix of routes between clusters
             max_distance : int, maximum distance of routes between clusters in meters"""
         if clusterfile:
             self.load_OA_clusters(clusterfile)
         elif not clusterfile:
             self.load_OA_clusters()
+
+        # create maximum radius for each node
+        coords = self.dynamic_radius(k, alpha)
+
         # adjaceny matrix for graph
         self.adj = pd.DataFrame(index=self.clusters, columns=self.clusters)
         # iterate through every combination of
@@ -204,7 +210,7 @@ class Data_Management:
             for clusterB in self.clusters:
                 try:
                     self.load_route(clusterA, clusterB)
-                    if self.route['distance'] < max_distance:
+                    if self.route['distance'] < coords.loc[coords['OA_code'] == clusterA, 'radius'].iloc[0]:
                         self.adj.loc[clusterA,
                                      clusterB] = self.route['distance']
                 except FileNotFoundError:
@@ -232,12 +238,12 @@ class OA_Plot:
         self.clusters.plot(ax=self.ax, **kwargs)
         self.ax.set_title('Markov Clustered Locations')
 
-    def create_route_plot(self, route):
+    def create_route_plot(self, route, **kwargs):
 
         self.curves = pd.concat([self.curves, gpd.GeoDataFrame({'geometry': [Point(long, lat) for lat, long in zip(
             route['steps']['lat'], route['steps']['long'])]}, crs='EPSG:4326')])
 
-        self.ax.plot(route['steps']['long'], route['steps']['lat'])
+        self.ax.plot(route['steps']['long'], route['steps']['lat'], **kwargs)
 
     def add_basemap(self):
         """ should be final call to ensure map generates properly """
@@ -251,40 +257,42 @@ class OA_Plot:
         self.ax.set_ylabel('Latitude')
 
 
-def Plot(clusterfile='markov_oa_codes_merged.csv'):
+def Plot(k, alpha, clusterfile='markov_oa_codes_merged.csv'):
     """ plots all clusters and route for current cluster method """
 
     # load clusters and initialise plot
     handler = Data_Management()
     handler.load_OA_clusters(clusterfile)
-    coords = handler.dynamic_radius()
+    coords = handler.dynamic_radius(k, alpha)
     figure = OA_Plot(handler)
 
     max_distance = 2000  # maximum distance to connect cluster by (meters)
 
     # mapping routes between clusters
-    print(coords)
     for clusterA in handler.clusters:
         for clusterB in handler.clusters:
             try:
                 handler.load_route(clusterA, clusterB)
             except FileNotFoundError:
                 # some routes are only calculated one way, ignore attempts to load that route reversed
+                # or if using a different cluster set some routes may no be calculated
                 print(f'Route between {clusterA} and {clusterB} not found')
             if handler.route['distance'] < coords.loc[handler.coords['OA_code'] == clusterA, 'radius'].iloc[0]:
                 figure.create_route_plot(handler.route)
 
+    # add pyplot parameters like color, size, etc to create_scatter_plot as usual
     figure.create_scatter_plot()
     figure.add_basemap()
     figure.pretty_plot()
+    figure.ax.set_title(f'k={k}, alpha={alpha}')
     figure.fig.show()
 
 
-def main(clusterfile='markov_oa_code_merged.csv'):
+def main(k, alpha, count, clusterfile='markov_oa_code_merged.csv'):
     # generate the directional graph
-    max_distance = 2000
+
     handler = Data_Management()
-    adjacency_matrix = handler.generate_graph(max_distance)
+    adjacency_matrix = handler.generate_graph(k=k, alpha=alpha)
     adjacency_matrix.fillna(0, inplace=True)
     network = nx.from_pandas_adjacency(
         adjacency_matrix, create_using=nx.DiGraph)
@@ -296,45 +304,61 @@ def main(clusterfile='markov_oa_code_merged.csv'):
     between = handler.coords.loc[handler.coords['OA_code'] == max(
         between_center, key=between_center.get)]
 
-    potential_routes = []
+    routes = []
     center = between['OA_code'].iloc[0]
     print(center)
-    print(handler.clusters[0])
+    colors = ['red', 'green', 'blue', 'gold', 'purple', 'black']
 
-    for terminal in handler.clusters:
-        if terminal == center:
-            # don't calculate route from center to itself
-            pass
-        else:
-            try:
-                potential_routes.append(
-                    nx.shortest_path(network, center, terminal))
-            except:
-                # if there is no path between nodes skip the node
+    # iteratively create routes removing already visited nodes each time
+    while len(routes) < count:
+
+        potential_routes = []
+        for terminal in handler.clusters:
+            if terminal == center:
+                # don't calculate route from center to itself
                 pass
+            else:
+                try:
+                    potential_routes.append(
+                        nx.shortest_path(network, center, terminal))
+                except:
+                    # if there is no path between nodes skip the node
+                    print(f'No path between {center} and {terminal} found')
 
-    print(len(potential_routes))
-    print(potential_routes[:25])
+        coords = import_json()
 
-    coords = import_json()
+        line_scores = []
 
-    line_scores = []
+        for route in potential_routes:
+            line_scores.append(Indivual_Line_Score.Line_Score(route, coords))
 
-    for route in potential_routes:
-        line_scores.append(Indivual_Line_Score.Line_Score(route, coords))
+        # add the route nodes and total score to the record
+        routes.append(
+            [potential_routes[line_scores.index(max(line_scores))], max(line_scores)])
 
-    best_route = potential_routes[line_scores.index(max(line_scores))]
+        # remove the visited route from the graph while keeping the center
+        print(routes)
+        nodes_to_drop = routes[-1][0].copy()
+        nodes_to_drop.remove(center)
+        print(nodes_to_drop)
+        network.remove_nodes_from(nodes_to_drop)
 
-    # plotting only the best route
+    # plotting only the best routes
     figure = OA_Plot(handler)
-    for cluster_index in range(0, len(best_route)-1):
-        segment = handler.load_route(
-            best_route[cluster_index], best_route[cluster_index+1])
 
-        figure.create_route_plot(segment)
+    for i, route in enumerate(routes):
+        for cluster_index in range(0, len(route[0])-1):
+            # plot each route segment seperately
+            segment = handler.load_route(
+                route[0][cluster_index], route[0][cluster_index+1])
 
-    print(f'highest scoring line: {best_route}')
-    print(f'score: {max(line_scores)}')
+            figure.create_route_plot(
+                segment, color=colors[i], label=f'Route {i}')
+
+    figure.create_scatter_plot()
+    figure.add_basemap()
+
+    print(f'highest scoring lines: {routes}')
 
 
 def import_json():
@@ -346,7 +370,10 @@ def import_json():
 
 
 if __name__ == '__main__':
-    Plot()
-    # main()
+    k = 5
+    alpha = 3
+    count = 4
+    Plot(k, alpha)
+    main(k, alpha, count)
     # Route_Cleaner('routeA')
     # Pickle_Test()
