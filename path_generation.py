@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import geopandas as gpd
 import os
 import math
@@ -72,15 +73,14 @@ def Plan_Route(start, end, api_key="""insert api key here"""):
         return
 
 
-def generate_all_lines():
+def generate_all_lines(clusterfile):
     """ Create a complete graph of links between the clusters and an artificial center node """
 
-    # coordinates of colston street in bristol center where bus interchange currently is
-    # center = ('Center', 51.454919, -2.596510)
+    key = 'AIzaSyCSNv7dxSrWgsP-0fAWGvecodPK2s29ycs'
 
     # load cluster coordinates
     handler = Data_Management()
-    clusters = handler.load_cluster_coords()
+    clusters = handler.load_cluster_coords(clusterfile)
 
     # clusters.apply(lambda cluster: Plan_Route(center, cluster, api_key = key), axis=1)
 
@@ -137,7 +137,6 @@ class Data_Management:
         """ loads coordinates for clusters """
         self.clusters = self.load_OA_clusters(clusterfile)
         self.coords = pd.read_csv(os.path.join(self.csv_folder, filename))
-
         self.coords = self.coords[self.coords['OA_Code'].isin(self.clusters)]
         return self.coords
 
@@ -164,7 +163,7 @@ class Data_Management:
 
         return self.route
 
-    def dynamic_radius(self, k=5, alpha=3.5, filename='markov_oa_codes_merged.csv'):
+    def dynamic_radius(self, k=5, alpha=3.5, filename='markov__with_count62.csv'):
         """ implements a dynamic radius to generate graph from
             nodes with closer neighbours have a lower maximum connection radius """
 
@@ -202,7 +201,7 @@ class Data_Management:
         self.load_OA_clusters(clusterfile)
 
         # create maximum radius for each node
-        coords = self.dynamic_radius(k, alpha, clusterfile)
+        coords = self.dynamic_radius(k, alpha, filename=clusterfile)
 
         # adjaceny matrix for graph
         self.adj = pd.DataFrame(index=self.clusters, columns=self.clusters)
@@ -237,7 +236,7 @@ class OA_Plot:
     def create_scatter_plot(self, **kwargs):
         """ function for making and saving a nice plot """
         self.clusters.plot(ax=self.ax, **kwargs)
-        self.ax.set_title('Markov Clustered Locations')
+        # self.ax.set_title('Markov Clustered Locations')
 
     def create_route_plot(self, route, **kwargs):
 
@@ -252,13 +251,13 @@ class OA_Plot:
                         source=ctx.providers.CartoDB.Positron)
 
     def pretty_plot(self):
-        self.ax.set_title('Route Map')
+        # self.ax.set_title('Route Map')
         self.ax.grid(alpha=0.4)
-        self.ax.set_xlabel('Longitude')
-        self.ax.set_ylabel('Latitude')
+        # self.ax.set_xlabel('Longitude')
+        # self.ax.set_ylabel('Latitude')
 
 
-def Plot(k, alpha, clusterfile='markov_oa_codes_merged.csv'):
+def Plot(k, alpha, clusterfile='markov__with_count62.csv'):
     """ plots all clusters and route for current cluster method """
 
     # load clusters and initialise plot
@@ -275,7 +274,7 @@ def Plot(k, alpha, clusterfile='markov_oa_codes_merged.csv'):
             try:
                 handler.load_route(clusterA, clusterB)
                 if handler.route['distance'] < radius_coords.loc[handler.coords['OA_Code'] == clusterA, 'radius'].iloc[0]:
-                    figure.create_route_plot(handler.route)
+                    figure.create_route_plot(handler.route, color='cadetblue')
 
             except FileNotFoundError:
                 # some routes are only calculated one way, ignore attempts to load that route reversed
@@ -283,14 +282,17 @@ def Plot(k, alpha, clusterfile='markov_oa_codes_merged.csv'):
                 print(f'Route between {clusterA} and {clusterB} not found')
 
     # add pyplot parameters like color, size, etc to create_scatter_plot as usual
-    figure.create_scatter_plot()
+    figure.create_scatter_plot(color='black')
     figure.add_basemap()
     figure.pretty_plot()
     figure.ax.set_title(f'k={k}, alpha={alpha}')
     figure.fig.show()
 
+    return figure
 
-def main(k, alpha, count, clusterfile='markov_oa_codes_merged.csv'):
+
+def create_routes(k, alpha, count, center, clusterfile, plot=False):
+    """ create optimal routes for the given clusters """
     # generate the directional graph
 
     handler = Data_Management()
@@ -307,8 +309,6 @@ def main(k, alpha, count, clusterfile='markov_oa_codes_merged.csv'):
         between_center, key=between_center.get)]
 
     routes = []
-    center = 'E00174312'  # k=40 cluster center(ish) node
-    colors = ['red', 'green', 'blue', 'gold', 'purple', 'black']
 
     # iteratively create routes removing already visited nodes each time
     while len(routes) < count:
@@ -338,22 +338,34 @@ def main(k, alpha, count, clusterfile='markov_oa_codes_merged.csv'):
             routes.append(
                 [potential_routes[line_scores.index(max(line_scores))], max(line_scores)])
         except:
+            # if no routes can be found return
             print(f'No routes found')
             break
 
         # remove the visited route from the graph while keeping the center
-        print(routes)
+        # print(routes)
         nodes_to_drop = routes[-1][0].copy()
         # nodes_to_drop.remove(center)
-        print(nodes_to_drop[-1])
+        # print(nodes_to_drop[-1])
         try:
             network.remove_nodes_from(nodes_to_drop[-3:])
         except:
             print(f'Route length too short')
             break
 
+    if plot:
+        figure = OA_Plot(handler, clusterfile)
+        route_plot(routes, figure)
+
+    return routes
+
+
+def route_plot(routes, figure):
+
     # plotting only the best routes
-    figure = OA_Plot(handler, clusterfile)
+    handler = Data_Management()
+    colors = ['red', 'green', 'blue', 'gold', 'purple', 'black']
+    patches = []
 
     for i, route in enumerate(routes):
         for cluster_index in range(0, len(route[0])-1):
@@ -362,31 +374,178 @@ def main(k, alpha, count, clusterfile='markov_oa_codes_merged.csv'):
                 route[0][cluster_index], route[0][cluster_index+1])
 
             figure.create_route_plot(
-                segment, color=colors[i], label=f'Route {i}')
+                segment, color=colors[i])
+        patches.append(mpatches.Patch(color=colors[i], label=f'Route {i+1}'))
 
-    figure.ax.legend()
+    figure.ax.legend(handles=patches)
     figure.create_scatter_plot()
     figure.add_basemap()
+    figure.ax.set_xticks([])
+    figure.ax.set_yticks([])
 
     print(f'highest scoring lines: {routes}')
 
 
 def import_json():
-    filepath = 'C:/Users/pigwi/Coding/MDM3/Transport/Bris_Codes_with_Weights_and_Coords_NEW.json'
+    # filepath = 'C:/Users/pigwi/Coding/MDM3/Transport/Bris_Codes_with_Weights_and_Coords_NEW.json'
+    filepath = 'C:/Users/Kate/MDM_C/Bris_Codes_with_Weights_and_Coords_NEW.json'
     with open(filepath, 'r') as file:
         import json
         Dict = json.load(file)
     return Dict
 
 
+def hyperparameter_optimisation(k, alpha, center, clusterfile, count=1):
+    """ Handles creating and plotting route scores for graph generation hyperparameter optimisation """
+    """ k : int or array of k to test over
+        alpha : int or array of alpha to test over
+        clusterfile : str of clusters to create route for
+        count : int number of lines to create """
+
+    handler = Data_Management()
+    fig, ax = plt.subplots()
+    routes = []
+    route_scores = []
+
+    for k_curr in k:
+        for alpha_curr in alpha:
+            route = create_routes(k_curr, alpha_curr, count, center, clusterfile)
+
+            # attempt to save the current route
+            try:
+                # if a route is found add it to the saved route scores
+                route_scores.append({'k': k_curr,
+                                    'alpha': alpha_curr,
+                                     'score': route[0][1]})
+                # store route to plot later if a route is found
+                routes.append(route)
+            except:
+                print(f'No route found for k={k_curr}, alpha={alpha_curr}')
+
+        print(f'k={k_curr} complete')
+
+    print(route_scores)
+    max_score = max([route['score'] for route in route_scores])
+
+    # plot heatmap of line scores for k, alpha combinations, converting to array of pixel colours for imshow
+    grid = np.zeros((len(alpha), len(k)))
+    for route in route_scores:
+        grid[route['alpha']-1, route['k']-1] = route['score']
+
+    # flip along y axis so (0, 0) is in bottom left
+    grid = np.flip(grid, 0)
+
+    ax.imshow(grid)
+    ax.set_xticks(list(map(lambda x: x-1, k)), k)
+    ax.set_yticks(list(map(lambda x: x-1, alpha)), list(reversed(alpha)))
+
+    ax.set_xlabel(r'$k$')
+    ax.set_ylabel(r'$\alpha')
+
+    fig.tight_layout()
+    fig.savefig('kmed_grid.pdf', format='pdf')
+
+
+def route_length(route):
+    handler = Data_Management()
+    distance = 0
+    for index in range(0, len(route)-1):
+        distance += handler.load_route(route[index], route[index+1])['distance']
+
+    print(distance)
+
+
+def top_3_routes():
+    # k=6, alpha=3 markov cluster top 3 routes
+    routeMarkov = [['E00174312', 'E00073425', 'E00073526', 'E00073500', 'E00073545', 'E00073268', 'E00074057', 'E00073856', 'E00075639', 'E00073385', 'E00073659', 'E00073325'],
+                   ['E00174312', 'E00073425', 'E00073526', 'E00073500', 'E00073545',
+                       'E00073268', 'E00074057', 'E00073856', 'E00075639', 'E00075602'],
+                   ['E00174312', 'E00073425', 'E00073526', 'E00073500', 'E00073545', 'E00073268', 'E00074025', 'E00074000', 'E00073394', 'E00073380']]
+    # k=5, alpha=3 k-medoids clusters top 3 routes
+    routeKmed = [['E00174218', 'E00174289', 'E00073543', 'E00073283', 'E00073562', 'E00074002', 'E00074428', 'E00073234', 'E00073336'],
+                 ['E00174218', 'E00174289', 'E00073543', 'E00073283', 'E00073562', 'E00174316', 'E00073436', 'E00174245'],
+                 ['E00174218', 'E00174289', 'E00073543', 'E00073283', 'E00073562', 'E00074120', 'E00073868']]
+
+    clusterMarkov = 'markov_with_count62.csv'
+    clusterKmed = 'kmedoids_with_count50.csv'
+
+    handler = Data_Management()
+    markov = OA_Plot(handler, clusterMarkov)
+    kmed = OA_Plot(handler, clusterKmed)
+
+    colors = ['red', 'green', 'blue']
+    patches = []
+
+    # markov plot
+    for k, route in enumerate(routeMarkov):
+        patches.append(mpatches.Patch(color=colors[k], label=f'Route {k+1}'))
+        for i, node in enumerate(route):
+            try:
+                handler.load_route(route[i], route[i+1])
+                markov.create_route_plot(handler.route, color=colors[k])
+
+                if i == 0:
+                    markov.ax.scatter(handler.route['steps']['long'][0], handler.route['steps']['lat'][0])
+            except:
+                pass
+
+    markov.create_scatter_plot(alpha=0)
+    markov.ax.legend(handles=patches)
+    markov.ax.set_xticks([])
+    markov.ax.set_yticks([])
+    markov.ax.set_title('Top 3 Routes for Markov Clusters')
+    markov.add_basemap()
+
+    # kmed plot
+    for k, route in enumerate(routeKmed):
+        # patches.append(mpatches.Patch(color=colors[k], label=f'Route {k+1}'))
+        for i, node in enumerate(route):
+            try:
+                handler.load_route(route[i], route[i+1])
+                kmed.create_route_plot(handler.route, color=colors[k])
+
+                if i == 0:
+                    kmed.ax.scatter(handler.route['steps']['long'][0], handler.route['steps']['lat'][0])
+            except:
+                pass
+
+    kmed.create_scatter_plot(alpha=0)
+    kmed.ax.legend(handles=patches)
+    kmed.ax.set_xticks([])
+    kmed.ax.set_yticks([])
+    kmed.ax.set_title('Top 3 Routes for K-medoids Clusters')
+    kmed.add_basemap()
+
+
+def main():
+    pass
+
+
 if __name__ == '__main__':
-    k = 4
-    alpha = 3.5
-    count = 6   # maximum 6
+    k = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    alpha = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    count = 3   # maximum 6
+
+    main()
+
     # filename of clusters; 40, 50, 60, markov
-    clusterfile = 'kmedoids_oa_codes_60.csv'
-    Plot(k, alpha, clusterfile)     # plots full graph of network
-    # calculates and plots top {count} lines
-    # main(k, alpha, count, clusterfile)
+    clusterfile = 'kmedoids_with_count50.csv'
+    center = 'E00174218'    # k-medoids 50-cluster most travelled cluster (stoke croft)
+    # clusterfile = 'markov_with_count62.csv'
+    # center = 'E00174312'  # markov 62-cluster most travelled cluster (hospital in center)
+
+    # generate_all_lines(clusterfile)
+    # hyperparameter_optimisation(k, alpha, center, clusterfile)
+
+    k = 5
+    alpha = 3
+
+    # figure = Plot(k, alpha, clusterfile)     # plots full graph of network
+    # handler = Data_Management()
+    # figure = OA_Plot(handler, clusterfile)
+    # routes = create_routes(k, alpha, count, center, clusterfile, plot=False)  # create routes for given parameters
+    # route_plot(routes, figure)
+    # figure.ax.set_title('Top 3 Routes, K-medoids Clusters')
+
     # Route_Cleaner('routeA')
     # Pickle_Test()
